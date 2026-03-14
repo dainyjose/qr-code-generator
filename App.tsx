@@ -1,99 +1,322 @@
-import { useRef, useState } from "react";
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useRef, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  ScrollView,
+} from "react-native";
+
 import QRCode from "react-native-qrcode-svg";
 import { captureRef } from "react-native-view-shot";
+
 import * as MediaLibrary from "expo-media-library";
-import * as FileSystem from "expo-file-system/legacy";
+import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 
 export default function App() {
-  const [status, requestPermission] = MediaLibrary.usePermissions();
-  const viewRef = useRef(null);
-  const [saving, setSaving] = useState(false);
-  let url = "https://dainyjose.github.io/my-portfolio/";
+  const qrRef = useRef<any>(null);
+  const svgRef = useRef<any>(null);
 
-  const downloadQrCode = async () => {
-    try {
-      if (!status?.granted) {
-        const { granted } = await requestPermission();
-        if (!granted) {
-          Alert.alert(
-            "Permission denied",
-            "Cannot save without gallery access."
-          );
-          return;
-        }
-      }
+  const [url, setUrl] = useState("https://dainyjose.github.io/my-portfolio/");
 
-      setSaving(true);
-      const uri = await captureRef(viewRef, {
-        format: "png",
-        quality: 1,
-        result: "tmpfile",
-        scale: 3,
-      });
-      const filePath = `${FileSystem.cacheDirectory}QR_code.png`;
+  const [qrColor, setQrColor] = useState("#000000");
+  const [bgColor] = useState("#ffffff");
 
-      await FileSystem.copyAsync({
-        from: uri,
-        to: filePath,
-      });
+  const [qrSize, setQrSize] = useState("240");
+  const [logoSize, setLogoSize] = useState("40");
+  const [logoRadius, setLogoRadius] = useState("10");
 
-      const asset = await MediaLibrary.createAssetAsync(filePath);
-      await MediaLibrary.createAlbumAsync("QR Codes", asset, false);
+  const [logo, setLogo] = useState<string | null>(null);
+  const colors = [
+    "#000000",
+    "#1E88E5",
+    "#E53935",
+    "#8E24AA",
+    "#43A047",
+    "#FB8C00",
+    "#00ACC1",
+    "#FDD835",
+  ];
+  const validateURL = () => {
+    const trimmed = url.trim();
 
-      Alert.alert("Success", "QR Code saved to gallery!");
-    } catch (error) {
-      console.error("Save failed:", error);
-      Alert.alert("Error", "Failed to save QR code");
-    } finally {
-      setSaving(false);
+    if (!trimmed) {
+      Alert.alert("Invalid Input", "Please enter a URL");
+      return false;
+    }
+
+    if (!trimmed.startsWith("http")) {
+      Alert.alert("Invalid URL", "URL should start with http:// or https://");
+      return false;
+    }
+
+    return true;
+  };
+  // Pick logo
+  const pickLogo = async () => {
+    if (!validateURL()) return;
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      setLogo(result.assets[0].uri);
     }
   };
 
+  // Save PNG
+  const savePNG = async () => {
+    if (!validateURL()) return;
+    try {
+      const uri = await captureRef(qrRef, {
+        format: "png",
+        quality: 1,
+      });
+
+      const permission = await MediaLibrary.requestPermissionsAsync();
+
+      if (!permission.granted) {
+        Alert.alert("Permission required");
+        return;
+      }
+
+      const asset = await MediaLibrary.createAssetAsync(uri);
+
+      await MediaLibrary.createAlbumAsync("QR Codes", asset, false);
+
+      Alert.alert("Success", "PNG saved to gallery");
+    } catch (e) {
+      Alert.alert("Error saving PNG");
+    }
+  };
+
+  // Save SVG
+  const saveSVG = async () => {
+    if (!validateURL()) return;
+
+    try {
+      svgRef.current.toDataURL(async (data: string) => {
+        const fileUri = FileSystem.documentDirectory + "qrcode.svg";
+
+        const svgContent = `<svg xmlns="http://www.w3.org/2000/svg">${data}</svg>`;
+
+        await FileSystem.writeAsStringAsync(fileUri, svgContent, {
+          encoding: FileSystem.EncodingType.UTF8,
+        });
+
+        Alert.alert("SVG saved", fileUri);
+      });
+    } catch (e) {
+      Alert.alert("Error saving SVG");
+    }
+  };
+
+  const shareQR = async () => {
+    if (!validateURL()) return;
+
+    try {
+      const uri = await captureRef(qrRef, {
+        format: "png",
+        quality: 1,
+      });
+
+      const isAvailable = await Sharing.isAvailableAsync();
+
+      if (!isAvailable) {
+        Alert.alert("Sharing not available on this device");
+        return;
+      }
+
+      await Sharing.shareAsync(uri);
+    } catch (error) {
+      Alert.alert("Error sharing QR Code");
+    }
+  };
   return (
-    <View style={styles.container}>
-      <View
-        ref={viewRef}
-        collapsable={false}
-        style={{
-          justifyContent: "center",
-          alignItems: "center",
-          backgroundColor: "white",
-          padding: 20,
-        }}
-      >
-        <QRCode
-          value={url}
-          size={220}
-          // logo={require("./assets/icon.png")}
-          logoSize={40}
-          logoMargin={1}
-          logoBorderRadius={8}
-          backgroundColor="white"
-        />
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.title}>QR Generator</Text>
+      <Text style={styles.label}>URL</Text>
+
+      <TextInput
+        style={styles.input}
+        value={url}
+        onChangeText={setUrl}
+        placeholder="Enter URL"
+      />
+
+      <Text style={styles.label}>QR Size</Text>
+
+      <TextInput
+        style={styles.input}
+        keyboardType="numeric"
+        value={qrSize}
+        onChangeText={setQrSize}
+      />
+
+      <Text style={styles.label}>Logo Size</Text>
+
+      <TextInput
+        style={styles.input}
+        keyboardType="numeric"
+        value={logoSize}
+        onChangeText={setLogoSize}
+      />
+      <Text style={styles.label}>Logo Radius</Text>
+
+      <TextInput
+        style={styles.input}
+        keyboardType="numeric"
+        value={logoRadius}
+        onChangeText={setLogoRadius}
+      />
+      <Text style={styles.label}>QR Color</Text>
+
+      <View style={styles.colorRow}>
+        {colors.map((color) => (
+          <TouchableOpacity
+            key={color}
+            style={[
+              styles.colorCircle,
+              { backgroundColor: color },
+              qrColor === color && styles.selectedColor,
+            ]}
+            onPress={() => setQrColor(color)}
+          />
+        ))}
       </View>
+
       <TouchableOpacity
-        style={{
-          marginBottom: 20,
-          backgroundColor: "lightgray",
-          paddingHorizontal: 20,
-          paddingVertical: 10,
-          borderRadius: 20,
-          top: 20,
-        }}
-        onPress={downloadQrCode}
+        style={styles.button}
+        onPress={pickLogo}
       >
-        <Text>{saving ? "Saving..." : "Save QR to Gallery"}</Text>
+        <Text>Upload Logo</Text>
       </TouchableOpacity>
-    </View>
+
+      {url ? (
+        <View
+          ref={qrRef}
+          collapsable={false}
+          style={{
+            padding: 20,
+            backgroundColor: bgColor,
+            marginTop: 20,
+          }}
+        >
+          <QRCode
+            value={url.trim()}
+            size={parseInt(qrSize) || 240}
+            color={qrColor}
+            backgroundColor={bgColor}
+            logo={logo ? { uri: logo } : undefined}
+            logoSize={parseInt(logoSize) || 40}
+            logoBorderRadius={parseInt(logoRadius) || 0}
+            getRef={(c) => (svgRef.current = c)}
+          />
+        </View>
+      ) : (
+        <Text style={{ marginTop: 20, color: "gray" }}>
+          Enter a URL to generate QR Code
+        </Text>
+      )}
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity
+          style={[styles.saveBtn, !url && { opacity: 0.5 }]}
+          onPress={savePNG}
+        >
+          <Text style={styles.btnText}>Download PNG</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.saveBtn, !url && { opacity: 0.5 }]}
+          onPress={saveSVG}
+        >
+          <Text style={styles.btnText}>Download SVG</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.saveBtn, !url && { opacity: 0.5 }]}
+          onPress={shareQR}
+        >
+          <Text style={styles.btnText}>Share QR Code</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: "#fff",
+    padding: 30,
     alignItems: "center",
+    marginVertical: 40,
+  },
+
+  title: {
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 20,
+  },
+
+  input: {
+    borderWidth: 1,
+    width: "100%",
+    padding: 10,
+    marginBottom: 10,
+    borderRadius: 8,
+  },
+
+  label: {
+    alignSelf: "flex-start",
+    fontWeight: "600",
+    marginTop: 10,
+  },
+  buttonContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "center",
+    marginTop: 10,
+  },
+  button: {
+    marginTop: 15,
+    padding: 10,
+    backgroundColor: "#ddd",
+    borderRadius: 8,
+    flex: 1 / 3,
+    gap: 5,
+  },
+
+  saveBtn: {
+    backgroundColor: "black",
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    margin: 5,
+    minWidth: 120,
+  },
+
+  btnText: {
+    color: "#fff",
+  },
+  colorRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginVertical: 10,
+  },
+
+  colorCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    margin: 6,
+  },
+
+  selectedColor: {
+    borderWidth: 3,
+    borderColor: "#000",
   },
 });
