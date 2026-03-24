@@ -7,14 +7,13 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-
 import QRCode from "react-native-qrcode-svg";
 import { captureRef } from "react-native-view-shot";
-
 import * as MediaLibrary from "expo-media-library";
 import * as ImagePicker from "expo-image-picker";
-import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
 export default function App() {
@@ -96,27 +95,6 @@ export default function App() {
     }
   };
 
-  // Save SVG
-  const saveSVG = async () => {
-    if (!validateURL()) return;
-
-    try {
-      svgRef.current.toDataURL(async (data: string) => {
-        const fileUri = FileSystem.documentDirectory + "qrcode.svg";
-
-        const svgContent = `<svg xmlns="http://www.w3.org/2000/svg">${data}</svg>`;
-
-        await FileSystem.writeAsStringAsync(fileUri, svgContent, {
-          encoding: FileSystem.EncodingType.UTF8,
-        });
-
-        Alert.alert("SVG saved", fileUri);
-      });
-    } catch (e) {
-      Alert.alert("Error saving SVG");
-    }
-  };
-
   const shareQR = async () => {
     if (!validateURL()) return;
 
@@ -139,117 +117,124 @@ export default function App() {
     }
   };
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>QR Generator</Text>
-      <Text style={styles.label}>URL</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
+    >
+      <View style={styles.main}>
+        <ScrollView contentContainerStyle={styles.container}>
+          <Text style={styles.title}>QR Generator</Text>
+          <Text style={styles.label}>URL</Text>
 
-      <TextInput
-        style={styles.input}
-        value={url}
-        onChangeText={setUrl}
-        placeholder="Enter URL"
-      />
+          <TextInput
+            style={styles.input}
+            value={url}
+            onChangeText={setUrl}
+            placeholder="Enter URL"
+          />
 
-      <Text style={styles.label}>QR Size</Text>
+          <Text style={styles.label}>QR Size</Text>
 
-      <TextInput
-        style={styles.input}
-        keyboardType="numeric"
-        value={qrSize}
-        onChangeText={setQrSize}
-      />
+          <TextInput
+            style={styles.input}
+            keyboardType="numeric"
+            value={qrSize}
+            onChangeText={setQrSize}
+          />
 
-      <Text style={styles.label}>Logo Size</Text>
+          <Text style={styles.label}>Logo Size</Text>
 
-      <TextInput
-        style={styles.input}
-        keyboardType="numeric"
-        value={logoSize}
-        onChangeText={setLogoSize}
-      />
-      <Text style={styles.label}>Logo Radius</Text>
+          <TextInput
+            style={styles.input}
+            keyboardType="numeric"
+            value={logoSize}
+            onChangeText={setLogoSize}
+          />
+          <Text style={styles.label}>Logo Radius</Text>
 
-      <TextInput
-        style={styles.input}
-        keyboardType="numeric"
-        value={logoRadius}
-        onChangeText={setLogoRadius}
-      />
-      <Text style={styles.label}>QR Color</Text>
+          <TextInput
+            style={styles.input}
+            keyboardType="numeric"
+            value={logoRadius}
+            onChangeText={setLogoRadius}
+          />
+          <Text style={styles.label}>QR Color</Text>
 
-      <View style={styles.colorRow}>
-        {colors.map((color) => (
+          <View style={styles.colorRow}>
+            {colors.map((color) => (
+              <TouchableOpacity
+                key={color}
+                style={[
+                  styles.colorCircle,
+                  { backgroundColor: color },
+                  qrColor === color && styles.selectedColor,
+                ]}
+                onPress={() => setQrColor(color)}
+              />
+            ))}
+          </View>
+
           <TouchableOpacity
-            key={color}
-            style={[
-              styles.colorCircle,
-              { backgroundColor: color },
-              qrColor === color && styles.selectedColor,
-            ]}
-            onPress={() => setQrColor(color)}
-          />
-        ))}
+            style={styles.button}
+            onPress={pickLogo}
+          >
+            <Text>Upload Logo</Text>
+          </TouchableOpacity>
+
+          {url ? (
+            <View
+              ref={qrRef}
+              collapsable={false}
+              style={{
+                padding: 20,
+                backgroundColor: bgColor,
+                marginTop: 20,
+              }}
+            >
+              <QRCode
+                value={url.trim()}
+                size={parseInt(qrSize) || 240}
+                color={qrColor}
+                backgroundColor={bgColor}
+                logo={logo ? { uri: logo } : undefined}
+                logoSize={parseInt(logoSize) || 40}
+                logoBorderRadius={parseInt(logoRadius) || 0}
+                getRef={(c) => (svgRef.current = c)}
+              />
+            </View>
+          ) : (
+            <Text style={{ marginTop: 20, color: "gray" }}>
+              Enter a URL to generate QR Code
+            </Text>
+          )}
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={[styles.saveBtn, !url && { opacity: 0.5 }]}
+              onPress={savePNG}
+            >
+              <Text style={styles.btnText}>Download PNG</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.saveBtn, !url && { opacity: 0.5 }]}
+              onPress={shareQR}
+            >
+              <Text style={styles.btnText}>Share QR Code</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
       </View>
-
-      <TouchableOpacity
-        style={styles.button}
-        onPress={pickLogo}
-      >
-        <Text>Upload Logo</Text>
-      </TouchableOpacity>
-
-      {url ? (
-        <View
-          ref={qrRef}
-          collapsable={false}
-          style={{
-            padding: 20,
-            backgroundColor: bgColor,
-            marginTop: 20,
-          }}
-        >
-          <QRCode
-            value={url.trim()}
-            size={parseInt(qrSize) || 240}
-            color={qrColor}
-            backgroundColor={bgColor}
-            logo={logo ? { uri: logo } : undefined}
-            logoSize={parseInt(logoSize) || 40}
-            logoBorderRadius={parseInt(logoRadius) || 0}
-            getRef={(c) => (svgRef.current = c)}
-          />
-        </View>
-      ) : (
-        <Text style={{ marginTop: 20, color: "gray" }}>
-          Enter a URL to generate QR Code
-        </Text>
-      )}
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={[styles.saveBtn, !url && { opacity: 0.5 }]}
-          onPress={savePNG}
-        >
-          <Text style={styles.btnText}>Download PNG</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.saveBtn, !url && { opacity: 0.5 }]}
-          onPress={saveSVG}
-        >
-          <Text style={styles.btnText}>Download SVG</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.saveBtn, !url && { opacity: 0.5 }]}
-          onPress={shareQR}
-        >
-          <Text style={styles.btnText}>Share QR Code</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  main: {
+    flex: 1,
+    paddingBottom: 20,
+    paddingTop: 30,
+  },
   container: {
     padding: 30,
     alignItems: "center",
